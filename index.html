@@ -29,7 +29,7 @@
 </head>
 <body>
 <div class="wrap">
-<header><h1>OPERACIÓN A2</h1><span class="pill">Simulacros · V5</span></header>
+<header><h1>OPERACIÓN A2</h1><span class="pill">Simulacros · V6</span></header>
 
 <section id="home">
   <div class="card">
@@ -111,7 +111,7 @@ function parseSimulacro(text, filename="Simulacro"){
   // Este parser no depende de ellos: localiza 1., 2., ... 90. en secuencia.
   text=text.replace(/\r/g," ").replace(/\s+/g," ").trim();
   const title=(text.match(/SIMULACRO\s+\d+/i)||[filename.replace(/\.pdf$/i,"")])[0].toUpperCase();
-  const keyStart=text.search(/PLANTILLA DE RESPUESTAS CORRECTAS/i);
+  const keyStart=text.toUpperCase().lastIndexOf("PLANTILLA DE RESPUESTAS CORRECTAS");
   if(keyStart<0) throw Error("No encuentro la plantilla de respuestas.");
   const body=text.slice(0,keyStart), key=text.slice(keyStart);
 
@@ -127,7 +127,7 @@ function parseSimulacro(text, filename="Simulacro"){
 
   let marks=[], from=0;
   for(let n=1;n<=90;n++){
-    const rx=new RegExp("(?:^|\\\\s)"+n+"\\\\.\\\\s");
+    const rx=new RegExp("(?:^|\\s)"+n+"\\.\\s");
     const sub=body.slice(from), m=sub.match(rx);
     if(!m) throw Error("No encuentro el comienzo de la pregunta "+n+".");
     const pos=from+m.index+(m[0].startsWith(" ")?1:0);
@@ -137,7 +137,7 @@ function parseSimulacro(text, filename="Simulacro"){
   let questions=[];
   for(let n=1;n<=90;n++){
     const block=body.slice(marks[n-1], n<90?marks[n]:body.length)
-      .replace(new RegExp("^"+n+"\\\\.\\\\s*"),"").trim();
+      .replace(new RegExp("^"+n+"\\.\\s*"),"").trim();
     const ia=block.search(/\sA\)\s*/);
     const ib=block.search(/\sB\)\s*/);
     const ic=block.search(/\sC\)\s*/);
@@ -172,7 +172,7 @@ function buildDiag(text,pages,filename,err=""){
     .replace(/\r/g,"␍")
     .replace(/\n/g,"↵\n");
   return [
-    "OPERACIÓN A2 · DIAGNÓSTICO V5",
+    "OPERACIÓN A2 · DIAGNÓSTICO V6",
     "Archivo: "+filename,
     "Páginas: "+pages,
     "Caracteres extraídos: "+text.length,
