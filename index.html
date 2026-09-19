@@ -29,7 +29,7 @@
 </head>
 <body>
 <div class="wrap">
-<header><h1>OPERACIÓN A2</h1><span class="pill">Simulacros · V4 diagnóstico</span></header>
+<header><h1>OPERACIÓN A2</h1><span class="pill">Simulacros · V5</span></header>
 
 <section id="home">
   <div class="card">
@@ -162,7 +162,7 @@ function parseSimulacro(text, filename="Simulacro"){
 let lastExtracted="";
 function buildDiag(text,pages,filename,err=""){
   const norm=text.replace(/\r/g," ").replace(/\s+/g," ").trim();
-  const keyIdx=norm.toUpperCase().lastIndexOf("PLANTILLA DE RESPUESTAS CORRECTAS");
+  const keyPos=norm.toUpperCase().lastIndexOf("PLANTILLA DE RESPUESTAS CORRECTAS");
   const checks=[];
   for(let n=1;n<=10;n++){
     const r=new RegExp("(?:^|\\s)"+n+"\\.\\s");
@@ -172,7 +172,7 @@ function buildDiag(text,pages,filename,err=""){
     .replace(/\r/g,"␍")
     .replace(/\n/g,"↵\n");
   return [
-    "OPERACIÓN A2 · DIAGNÓSTICO V4",
+    "OPERACIÓN A2 · DIAGNÓSTICO V5",
     "Archivo: "+filename,
     "Páginas: "+pages,
     "Caracteres extraídos: "+text.length,
