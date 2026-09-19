@@ -29,7 +29,7 @@
 </head>
 <body>
 <div class="wrap">
-<header><h1>OPERACIÓN A2</h1><span class="pill">Simulacros · V3</span></header>
+<header><h1>OPERACIÓN A2</h1><span class="pill">Simulacros · V4 diagnóstico</span></header>
 
 <section id="home">
   <div class="card">
@@ -39,6 +39,15 @@
     <div style="height:10px"></div>
     <button class="primary" onclick="importPDF()">Importar PDF</button>
     <p id="importMsg" class="muted"></p>
+    <div id="diagBox" class="hidden notice" style="margin-top:12px">
+      <b>Diagnóstico del PDF</b>
+      <p class="muted" style="margin-bottom:8px">Esto no envía nada. Solo muestra lo que tu móvil ha leído del PDF.</p>
+      <textarea id="diagText" readonly style="min-height:260px;font-size:.78rem"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="secondary" onclick="copyDiag()">Copiar diagnóstico</button>
+        <button class="secondary" onclick="downloadExtracted()">Guardar texto extraído</button>
+      </div>
+    </div>
   </div>
   <div class="card">
     <h2>También puedes pegar el texto</h2>
@@ -150,12 +159,59 @@ function parseSimulacro(text, filename="Simulacro"){
   }
   return {id:Date.now(),title,filename,questions,created:new Date().toISOString()};
 }
+let lastExtracted="";
+function buildDiag(text,pages,filename,err=""){
+  const norm=text.replace(/\r/g," ").replace(/\s+/g," ").trim();
+  const keyPos=norm.search(/PLANTILLA DE RESPUESTAS CORRECTAS/i);
+  const checks=[];
+  for(let n=1;n<=10;n++){
+    const r=new RegExp("(?:^|\\s)"+n+"\\.\\s");
+    checks.push(n+":"+(r.test(norm)?"sí":"no"));
+  }
+  const sample=text.slice(0,3500)
+    .replace(/\r/g,"␍")
+    .replace(/\n/g,"↵\n");
+  return [
+    "OPERACIÓN A2 · DIAGNÓSTICO V4",
+    "Archivo: "+filename,
+    "Páginas: "+pages,
+    "Caracteres extraídos: "+text.length,
+    "Plantilla encontrada: "+(keyPos>=0?"SÍ, posición "+keyPos:"NO"),
+    "Preguntas 1-10 detectadas: "+checks.join(" · "),
+    err ? "Error del importador: "+err : "Error del importador: ninguno",
+    "",
+    "PRIMEROS CARACTERES EXTRAÍDOS:",
+    "--------------------------------",
+    sample || "[VACÍO]"
+  ].join("\n");
+}
+function showDiag(text,pages,filename,err=""){
+  lastExtracted=text;
+  $("diagText").value=buildDiag(text,pages,filename,err);
+  $("diagBox").classList.remove("hidden");
+}
+async function copyDiag(){
+  const t=$("diagText").value;
+  try{await navigator.clipboard.writeText(t);alert("Diagnóstico copiado. Pégamelo en el chat.");}
+  catch(e){$("diagText").focus();$("diagText").select();alert("Seleccionado. Mantén pulsado y elige Copiar.");}
+}
+function downloadExtracted(){
+  if(!lastExtracted)return;
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([lastExtracted],{type:"text/plain;charset=utf-8"}));
+  a.download="texto_extraido_operacion_a2.txt";
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
 async function importPDF(){
   const f=$("pdfFile").files[0]; if(!f)return;
   $("importMsg").textContent="Leyendo PDF…";
+  $("diagBox").classList.add("hidden");
+  let extracted="", pages=0;
   try{
     if(!window._pdfjsLib) throw Error("El lector PDF aún no está disponible. Espera unos segundos y prueba de nuevo.");
     const buf=await f.arrayBuffer(), pdf=await window._pdfjsLib.getDocument({data:buf}).promise;
+    pages=pdf.numPages;
     let parts=[];
     for(let p=1;p<=pdf.numPages;p++){
       const page=await pdf.getPage(p), tc=await page.getTextContent();
@@ -166,9 +222,19 @@ async function importPDF(){
       }
       parts.push(s);
     }
-    addTest(parseSimulacro(parts.join("\n"),f.name));
-    $("importMsg").textContent="Importado correctamente.";
-  }catch(e){$("importMsg").textContent="No se pudo importar: "+e.message}
+    extracted=parts.join("\n");
+    try{
+      addTest(parseSimulacro(extracted,f.name));
+      $("importMsg").textContent="Importado correctamente.";
+      showDiag(extracted,pages,f.name,"");
+    }catch(pe){
+      $("importMsg").textContent="No se pudo importar: "+pe.message;
+      showDiag(extracted,pages,f.name,pe.message);
+    }
+  }catch(e){
+    $("importMsg").textContent="No se pudo leer el PDF: "+e.message;
+    showDiag(extracted,pages,f.name,e.message);
+  }
 }
 function importText(){
   try{addTest(parseSimulacro($("rawText").value,"Simulacro"));$("rawText").value="";alert("Simulacro importado");}
