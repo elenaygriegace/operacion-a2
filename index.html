@@ -162,7 +162,7 @@ function parseSimulacro(text, filename="Simulacro"){
 let lastExtracted="";
 function buildDiag(text,pages,filename,err=""){
   const norm=text.replace(/\r/g," ").replace(/\s+/g," ").trim();
-  const keyPos=norm.search(/PLANTILLA DE RESPUESTAS CORRECTAS/i);
+  const keyIdx=norm.toUpperCase().lastIndexOf("PLANTILLA DE RESPUESTAS CORRECTAS");
   const checks=[];
   for(let n=1;n<=10;n++){
     const r=new RegExp("(?:^|\\s)"+n+"\\.\\s");
