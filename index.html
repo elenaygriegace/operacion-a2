@@ -29,7 +29,7 @@
 </head>
 <body>
 <div class="wrap">
-<header><h1>OPERACIÓN A2</h1><span class="pill">Simulacros</span></header>
+<header><h1>OPERACIÓN A2</h1><span class="pill">Simulacros · V3</span></header>
 
 <section id="home">
   <div class="card">
@@ -98,44 +98,56 @@ function goHome(){show("home")}
 function cleanText(s){return s.replace(/\r/g,"").replace(/[ \t]+/g," ").replace(/\n{3,}/g,"\n\n").trim()}
 
 function parseSimulacro(text, filename="Simulacro"){
+  // El PDF puede llegar desde PDF.js con los saltos de línea alterados.
+  // Este parser no depende de ellos: localiza 1., 2., ... 90. en secuencia.
   text=text.replace(/\r/g," ").replace(/\s+/g," ").trim();
   const title=(text.match(/SIMULACRO\s+\d+/i)||[filename.replace(/\.pdf$/i,"")])[0].toUpperCase();
   const keyStart=text.search(/PLANTILLA DE RESPUESTAS CORRECTAS/i);
   if(keyStart<0) throw Error("No encuentro la plantilla de respuestas.");
   const body=text.slice(0,keyStart), key=text.slice(keyStart);
 
-  // La plantilla del PDF está en una tabla de 6 columnas (1,16,31,46,61,76...).
   let correct={};
-  const keyRe=/\b(\d{1,2})\s+([ABCD])\b/g; let km;
-  while((km=keyRe.exec(key))) {
-    const n=+km[1];
-    if(n>=1 && n<=90) correct[n]=km[2];
+  const tokens=key.match(/\b(?:[1-9]|[1-8]\d|90)\b|[ABCD]/g)||[];
+  for(let i=0;i<tokens.length-1;i++){
+    if(/^\d+$/.test(tokens[i]) && /^[ABCD]$/.test(tokens[i+1])){
+      const n=+tokens[i]; if(n>=1&&n<=90) correct[n]=tokens[i+1];
+    }
   }
   if(Object.keys(correct).length!==90)
-    throw Error("He leído "+Object.keys(correct).length+" respuestas de la plantilla, pero esperaba 90.");
+    throw Error("He leído "+Object.keys(correct).length+" respuestas de 90.");
 
-  let questions=[];
-  // En PDF.js los saltos de línea no son fiables; buscamos por número y por A) B) C) D).
-  const qRe=/\b(\d{1,2})\.\s+([\s\S]*?)\s+A\)\s+([\s\S]*?)\s+B\)\s+([\s\S]*?)\s+C\)\s+([\s\S]*?)\s+D\)\s+([\s\S]*?)(?=\s+\d{1,2}\.\s+|$)/g;
-  let m;
-  while((m=qRe.exec(body))){
-    const num=+m[1];
-    if(num<1 || num>90 || !correct[num]) continue;
-    questions.push({
-      num,
-      text:m[2].trim(),
-      options:{A:m[3].trim(),B:m[4].trim(),C:m[5].trim(),D:m[6].trim()},
-      correct:correct[num]
-    });
+  let marks=[], from=0;
+  for(let n=1;n<=90;n++){
+    const rx=new RegExp("(?:^|\\\\s)"+n+"\\\\.\\\\s");
+    const sub=body.slice(from), m=sub.match(rx);
+    if(!m) throw Error("No encuentro el comienzo de la pregunta "+n+".");
+    const pos=from+m.index+(m[0].startsWith(" ")?1:0);
+    marks.push(pos); from=pos+m[0].length-1;
   }
 
-  // Evita capturar números del texto introductorio: conserva una sola pregunta por número.
-  const byNum={};
-  questions.forEach(q=>byNum[q.num]=q);
-  questions=Object.values(byNum).sort((a,b)=>a.num-b.num);
-
-  if(questions.length!==90)
-    throw Error("He reconocido "+questions.length+" preguntas de 90. No guardaré un simulacro incompleto.");
+  let questions=[];
+  for(let n=1;n<=90;n++){
+    const block=body.slice(marks[n-1], n<90?marks[n]:body.length)
+      .replace(new RegExp("^"+n+"\\\\.\\\\s*"),"").trim();
+    const ia=block.search(/\sA\)\s*/);
+    const ib=block.search(/\sB\)\s*/);
+    const ic=block.search(/\sC\)\s*/);
+    const id=block.search(/\sD\)\s*/);
+    if(!(ia>=0 && ib>ia && ic>ib && id>ic))
+      throw Error("No puedo separar A/B/C/D en la pregunta "+n+".");
+    const markerLen=(s,i)=>{const m=s.slice(i).match(/^\s[ABCD]\)\s*/);return m?m[0].length:3};
+    questions.push({
+      num:n,
+      text:block.slice(0,ia).trim(),
+      options:{
+        A:block.slice(ia+markerLen(block,ia),ib).trim(),
+        B:block.slice(ib+markerLen(block,ib),ic).trim(),
+        C:block.slice(ic+markerLen(block,ic),id).trim(),
+        D:block.slice(id+markerLen(block,id)).trim()
+      },
+      correct:correct[n]
+    });
+  }
   return {id:Date.now(),title,filename,questions,created:new Date().toISOString()};
 }
 async function importPDF(){
@@ -147,13 +159,12 @@ async function importPDF(){
     let parts=[];
     for(let p=1;p<=pdf.numPages;p++){
       const page=await pdf.getPage(p), tc=await page.getTextContent();
-      let lines={}, lastY=null;
-      tc.items.forEach(it=>{
-        const y=Math.round(it.transform[5]);
-        (lines[y]??=[]).push({x:it.transform[4],s:it.str});
-      });
-      const ys=Object.keys(lines).map(Number).sort((a,b)=>b-a);
-      parts.push(ys.map(y=>lines[y].sort((a,b)=>a.x-b.x).map(z=>z.s).join(" ")).join("\n"));
+      let s="";
+      for(const it of tc.items){
+        s += it.str;
+        s += it.hasEOL ? "\n" : " ";
+      }
+      parts.push(s);
     }
     addTest(parseSimulacro(parts.join("\n"),f.name));
     $("importMsg").textContent="Importado correctamente.";
