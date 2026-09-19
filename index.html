@@ -29,7 +29,7 @@
 </head>
 <body>
 <div class="wrap">
-<header><h1>OPERACIÓN A2</h1><span class="pill">Simulacros · V7</span></header>
+<header><h1>OPERACIÓN A2</h1><span class="pill">Simulacros · V8</span></header>
 
 <section id="home">
   <div class="card">
@@ -39,6 +39,15 @@
     <div style="height:10px"></div>
     <button class="primary" onclick="importPDF()">Importar PDF</button>
     <p id="importMsg" class="muted"></p>
+    <div id="diagBox" class="hidden notice" style="display:none!important;margin-top:12px">
+      <b>Diagnóstico del PDF</b>
+      <p class="muted" style="margin-bottom:8px">Esto no envía nada. Solo muestra lo que tu móvil ha leído del PDF.</p>
+      <textarea id="diagText" readonly style="min-height:260px;font-size:.78rem"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="secondary" onclick="copyDiag()">Copiar diagnóstico</button>
+        <button class="secondary" onclick="downloadExtracted()">Guardar texto extraído</button>
+      </div>
+    </div>
   </div>
   <div class="card">
     <h2>También puedes pegar el texto</h2>
@@ -163,7 +172,7 @@ function buildDiag(text,pages,filename,err=""){
     .replace(/\r/g,"␍")
     .replace(/\n/g,"↵\n");
   return [
-    "OPERACIÓN A2 · DIAGNÓSTICO V6",
+    "OPERACIÓN A2 · DIAGNÓSTICO V8",
     "Archivo: "+filename,
     "Páginas: "+pages,
     "Caracteres extraídos: "+text.length,
