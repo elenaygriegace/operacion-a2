@@ -29,12 +29,12 @@
 </head>
 <body>
 <div class="wrap">
-<header><h1>OPERACIÓN A2</h1><span class="pill">Simulacros · V9</span></header>
+<header><h1>OPERACIÓN A2</h1><span class="pill">Simulacros · V10</span></header>
 
 <section id="home">
   <div class="card">
     <h2>Subir simulacro</h2>
-    <p class="muted">PDF con 90 preguntas A/B/C/D y plantilla de respuestas al final.</p>
+    <p class="muted">PDF con preguntas A/B/C/D y plantilla de respuestas al final. Detecta automáticamente cuántas preguntas contiene.</p>
     <input id="pdfFile" type="file" accept="application/pdf"/>
     <div style="height:10px"></div>
     <button class="primary" onclick="importPDF()">Importar PDF</button>
@@ -116,7 +116,7 @@ function cleanText(s){return s.replace(/\r/g,"").replace(/[ \t]+/g," ").replace(
 
 function parseSimulacro(text, filename="Simulacro"){
   // El PDF puede llegar desde PDF.js con los saltos de línea alterados.
-  // Este parser no depende de ellos: localiza 1., 2., ... 90. en secuencia.
+  // El número de preguntas se detecta automáticamente a partir de la plantilla final.
   text=text.replace(/\r/g," ").replace(/\s+/g," ").trim();
   const title=(text.match(/SIMULACRO\s+\d+/i)||[filename.replace(/\.pdf$/i,"")])[0].toUpperCase();
   const keyStart=text.toUpperCase().lastIndexOf("PLANTILLA DE RESPUESTAS CORRECTAS");
@@ -124,17 +124,22 @@ function parseSimulacro(text, filename="Simulacro"){
   const body=text.slice(0,keyStart), key=text.slice(keyStart);
 
   let correct={};
-  const tokens=key.match(/\b(?:[1-9]|[1-8]\d|90)\b|[ABCD]/g)||[];
+  const tokens=key.match(/\b\d{1,3}\b|[ABCD]/g)||[];
   for(let i=0;i<tokens.length-1;i++){
     if(/^\d+$/.test(tokens[i]) && /^[ABCD]$/.test(tokens[i+1])){
       const n=+tokens[i]; if(n>=1&&n<=90) correct[n]=tokens[i+1];
     }
   }
-  if(Object.keys(correct).length!==90)
-    throw Error("He leído "+Object.keys(correct).length+" respuestas de 90.");
+
+  // Solo aceptamos una plantilla consecutiva: 1, 2, 3... hasta la última pregunta.
+  let total=0;
+  while(total<90 && correct[total+1]) total++;
+  if(total<1) throw Error("No he podido leer ninguna respuesta de la plantilla.");
+  const extras=Object.keys(correct).map(Number).filter(n=>n>total && n<=90);
+  if(extras.length) throw Error("La plantilla de respuestas no es consecutiva: falta la respuesta "+(total+1)+".");
 
   let marks=[], from=0;
-  for(let n=1;n<=90;n++){
+  for(let n=1;n<=total;n++){
     const rx=new RegExp("(?:^|\\s)"+n+"\\.\\s");
     const sub=body.slice(from), m=sub.match(rx);
     if(!m) throw Error("No encuentro el comienzo de la pregunta "+n+".");
@@ -143,8 +148,8 @@ function parseSimulacro(text, filename="Simulacro"){
   }
 
   let questions=[];
-  for(let n=1;n<=90;n++){
-    const block=body.slice(marks[n-1], n<90?marks[n]:body.length)
+  for(let n=1;n<=total;n++){
+    const block=body.slice(marks[n-1], n<total?marks[n]:body.length)
       .replace(new RegExp("^"+n+"\\.\\s*"),"").trim();
     const ia=block.search(/\sA\)\s*/);
     const ib=block.search(/\sB\)\s*/);
