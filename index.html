@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+  <meta name="theme-color" content="#111827"/>
+  <title>Operación A2</title>
+  <link rel="manifest" href="manifest.webmanifest"/>
+  <style>
+    :root{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#111827;background:#f3f4f6}
+    *{box-sizing:border-box} body{margin:0}.wrap{max-width:760px;margin:auto;padding:16px 16px 90px}
+    header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+    h1{font-size:1.45rem;margin:0}.card{background:white;border-radius:18px;padding:18px;margin:12px 0;box-shadow:0 3px 18px #0001}
+    button,.btn{border:0;border-radius:12px;padding:13px 16px;font-weight:700;font-size:1rem;cursor:pointer}
+    .primary{background:#111827;color:white}.secondary{background:#e5e7eb;color:#111827}.danger{background:#fee2e2;color:#991b1b}
+    input[type=file]{width:100%;padding:14px;background:#f9fafb;border:1px dashed #9ca3af;border-radius:12px}
+    .muted{color:#6b7280}.hidden{display:none!important}.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1}
+    .option{display:block;width:100%;text-align:left;margin:9px 0;background:#f3f4f6;border:2px solid transparent}
+    .option.selected{border-color:#111827;background:#e5e7eb}.progress{height:8px;background:#e5e7eb;border-radius:8px;overflow:hidden}
+    .progress>div{height:100%;background:#111827}.topline{display:flex;justify-content:space-between;gap:8px;align-items:center}
+    .pill{background:#eef2ff;border-radius:999px;padding:6px 10px;font-size:.85rem}
+    .score{font-size:3rem;font-weight:800}.wrong{border-left:5px solid #b91c1c}.correct{border-left:5px solid #15803d}
+    table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px solid #e5e7eb;text-align:left}
+    nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #ddd;display:flex;justify-content:center;z-index:5}
+    nav div{max-width:760px;width:100%;display:flex}nav button{flex:1;background:white;border-radius:0;font-size:.85rem}
+    textarea{width:100%;min-height:180px;border:1px solid #d1d5db;border-radius:12px;padding:12px}
+    .notice{background:#fffbeb;border:1px solid #fde68a;padding:12px;border-radius:12px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+<header><h1>OPERACIÓN A2</h1><span class="pill">Simulacros · V11</span></header>
+
+<section id="home">
+  <div class="card">
+    <h2>Subir simulacro</h2>
+    <p class="muted">PDF con preguntas A/B/C/D y plantilla de respuestas al final. Detecta automáticamente cuántas preguntas contiene.</p>
+    <input id="pdfFile" type="file" accept="application/pdf"/>
+    <div style="height:10px"></div>
+    <button class="primary" onclick="importPDF()">Importar PDF</button>
+    <p id="importMsg" class="muted"></p>
+    <div id="diagBox" class="hidden notice" style="display:none!important;margin-top:12px">
+      <b>Diagnóstico del PDF</b>
+      <p class="muted" style="margin-bottom:8px">Esto no envía nada. Solo muestra lo que tu móvil ha leído del PDF.</p>
+      <textarea id="diagText" readonly style="min-height:260px;font-size:.78rem"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="secondary" onclick="copyDiag()">Copiar diagnóstico</button>
+        <button class="secondary" onclick="downloadExtracted()">Guardar texto extraído</button>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>También puedes pegar el texto</h2>
+    <p class="muted">Sirve como alternativa si el navegador no puede leer el PDF directamente.</p>
+    <textarea id="rawText" placeholder="Pega aquí el texto extraído del simulacro..."></textarea>
+    <button class="secondary" onclick="importText()">Importar texto</button>
+  </div>
+  <div class="card">
+    <h2>Copia de seguridad</h2>
+    <p class="muted">Guarda en un archivo tus simulacros, histórico y tests a medias. También puedes restaurar una copia o incorporar un histórico recuperado.</p>
+    <div class="row">
+      <button class="secondary" onclick="exportBackup()">Guardar copia</button>
+      <button class="secondary" onclick="document.getElementById('restoreFile').click()">Restaurar / importar</button>
+    </div>
+    <input id="restoreFile" type="file" accept="application/json,.json" style="display:none" onchange="importBackupFile(event)"/>
+    <p id="backupMsg" class="muted"></p>
+  </div>
+  <div class="card">
+    <h2>Simulacros guardados</h2>
+    <div id="tests"></div>
+  </div>
+</section>
+
+<section id="exam" class="hidden">
+  <div class="topline"><button class="secondary" onclick="goHome()">Salir</button><span id="counter" class="pill"></span></div>
+  <div class="progress"><div id="bar"></div></div>
+  <div class="card">
+    <h2 id="qtext"></h2>
+    <div id="opts"></div>
+  </div>
+  <div class="row">
+    <button class="secondary" onclick="prevQ()">Anterior</button>
+    <button class="secondary" onclick="clearAnswer()">En blanco</button>
+    <button class="primary" onclick="nextQ()">Siguiente</button>
+  </div>
+  <div style="height:10px"></div>
+  <button class="danger" style="width:100%" onclick="finishExam()">Finalizar y corregir</button>
+</section>
+
+<section id="result" class="hidden">
+  <button class="secondary" onclick="goHome()">← Inicio</button>
+  <div class="card"><div id="score" class="score"></div><div id="summary"></div></div>
+  <div class="card"><h2>Revisión</h2>
+    <div class="row" style="margin-bottom:10px"><button class="secondary" onclick="setResultFilter('all')">Todas</button><button class="secondary" onclick="setResultFilter('wrong')">Fallos</button><button class="secondary" onclick="setResultFilter('blank')">En blanco</button></div>
+    <div id="review"></div></div>
+</section>
+
+<section id="history" class="hidden">
+  <div class="card"><h2>Histórico</h2><div id="historyTable"></div></div>
+  <div id="historyReview" class="hidden card">
+    <div class="topline"><h2 style="margin:0">Revisión del intento</h2><button class="secondary" onclick="closeHistoryReview()">Cerrar</button></div>
+    <div id="historyReviewSummary" class="muted" style="margin:10px 0"></div>
+    <div class="row" style="margin-bottom:10px"><button class="secondary" onclick="setHistoryFilter('all')">Todas</button><button class="secondary" onclick="setHistoryFilter('wrong')">Fallos</button><button class="secondary" onclick="setHistoryFilter('blank')">En blanco</button></div>
+    <div id="historyReviewList"></div>
+  </div>
+</section>
+</div>
+
+<nav><div><button onclick="goHome()">📚<br>Tests</button><button onclick="showHistory()">📊<br>Histórico</button></div></nav>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs" type="module"></script>
+<script type="module">
+  import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs";
+  pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs";
+  window._pdfjsLib=pdfjsLib;
+</script>
+<script>
+let current=null, qi=0, answers={};
+const $=id=>document.getElementById(id);
+const load=(k,d=[])=>JSON.parse(localStorage.getItem(k)||JSON.stringify(d));
+const save=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+
+function show(id){["home","exam","result","history"].forEach(x=>$(x).classList.toggle("hidden",x!==id));if(id==="home")renderTests()}
+function goHome(){show("home")}
+function cleanText(s){return s.replace(/\r/g,"").replace(/[ \t]+/g," ").replace(/\n{3,}/g,"\n\n").trim()}
+
+function parseSimulacro(text, filename="Simulacro"){
+  // El PDF puede llegar desde PDF.js con los saltos de línea alterados.
+  // El número de preguntas se detecta automáticamente a partir de la plantilla final.
+  text=text.replace(/\r/g," ").replace(/\s+/g," ").trim();
+  const title=(text.match(/SIMULACRO\s+\d+/i)||[filename.replace(/\.pdf$/i,"")])[0].toUpperCase();
+  const keyStart=text.toUpperCase().lastIndexOf("PLANTILLA DE RESPUESTAS CORRECTAS");
+  if(keyStart<0) throw Error("No encuentro la plantilla de respuestas.");
+  const body=text.slice(0,keyStart), key=text.slice(keyStart);
+
+  let correct={};
+  const tokens=key.match(/\b\d{1,3}\b|[ABCD]/g)||[];
+  for(let i=0;i<tokens.length-1;i++){
+    if(/^\d+$/.test(tokens[i]) && /^[ABCD]$/.test(tokens[i+1])){
+      const n=+tokens[i]; if(n>=1&&n<=90) correct[n]=tokens[i+1];
+    }
+  }
+
+  // Solo aceptamos una plantilla consecutiva: 1, 2, 3... hasta la última pregunta.
+  let total=0;
+  while(total<90 && correct[total+1]) total++;
+  if(total<1) throw Error("No he podido leer ninguna respuesta de la plantilla.");
+  const extras=Object.keys(correct).map(Number).filter(n=>n>total && n<=90);
+  if(extras.length) throw Error("La plantilla de respuestas no es consecutiva: falta la respuesta "+(total+1)+".");
+
+  let marks=[], from=0;
+  for(let n=1;n<=total;n++){
+    const rx=new RegExp("(?:^|\\s)"+n+"\\.\\s");
+    const sub=body.slice(from), m=sub.match(rx);
+    if(!m) throw Error("No encuentro el comienzo de la pregunta "+n+".");
+    const pos=from+m.index+(m[0].startsWith(" ")?1:0);
+    marks.push(pos); from=pos+m[0].length-1;
+  }
+
+  let questions=[];
+  for(let n=1;n<=total;n++){
+    const block=body.slice(marks[n-1], n<total?marks[n]:body.length)
+      .replace(new RegExp("^"+n+"\\.\\s*"),"").trim();
+    const ia=block.search(/\sA\)\s*/);
+    const ib=block.search(/\sB\)\s*/);
+    const ic=block.search(/\sC\)\s*/);
+    const id=block.search(/\sD\)\s*/);
+    if(!(ia>=0 && ib>ia && ic>ib && id>ic))
+      throw Error("No puedo separar A/B/C/D en la pregunta "+n+".");
+    const markerLen=(s,i)=>{const m=s.slice(i).match(/^\s[ABCD]\)\s*/);return m?m[0].length:3};
+    questions.push({
+      num:n,
+      text:block.slice(0,ia).trim(),
+      options:{
+        A:block.slice(ia+markerLen(block,ia),ib).trim(),
+        B:block.slice(ib+markerLen(block,ib),ic).trim(),
+        C:block.slice(ic+markerLen(block,ic),id).trim(),
+        D:block.slice(id+markerLen(block,id)).trim()
+      },
+      correct:correct[n]
+    });
+  }
+  return {id:Date.now(),title,filename,questions,created:new Date().toISOString()};
+}
+let lastExtracted="";
+function buildDiag(text,pages,filename,err=""){
+  const norm=text.replace(/\r/g," ").replace(/\s+/g," ").trim();
+  const keyPos=norm.toUpperCase().lastIndexOf("PLANTILLA DE RESPUESTAS CORRECTAS");
+  const checks=[];
+  for(let n=1;n<=10;n++){
+    const r=new RegExp("(?:^|\\s)"+n+"\\.\\s");
+    checks.push(n+":"+(r.test(norm)?"sí":"no"));
+  }
+  const sample=text.slice(0,3500)
+    .replace(/\r/g,"␍")
+    .replace(/\n/g,"↵\n");
+  return [
+    "OPERACIÓN A2 · DIAGNÓSTICO V9",
+    "Archivo: "+filename,
+    "Páginas: "+pages,
+    "Caracteres extraídos: "+text.length,
+    "Plantilla encontrada: "+(keyPos>=0?"SÍ, posición "+keyPos:"NO"),
+    "Preguntas 1-10 detectadas: "+checks.join(" · "),
+    err ? "Error del importador: "+err : "Error del importador: ninguno",
+    "",
+    "PRIMEROS CARACTERES EXTRAÍDOS:",
+    "--------------------------------",
+    sample || "[VACÍO]"
+  ].join("\n");
+}
+function showDiag(text,pages,filename,err=""){
+  lastExtracted=text;
+  $("diagText").value=buildDiag(text,pages,filename,err);
+  $("diagBox").classList.remove("hidden");
+}
+async function copyDiag(){
+  const t=$("diagText").value;
+  try{await navigator.clipboard.writeText(t);alert("Diagnóstico copiado. Pégamelo en el chat.");}
+  catch(e){$("diagText").focus();$("diagText").select();alert("Seleccionado. Mantén pulsado y elige Copiar.");}
+}
+function downloadExtracted(){
+  if(!lastExtracted)return;
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([lastExtracted],{type:"text/plain;charset=utf-8"}));
+  a.download="texto_extraido_operacion_a2.txt";
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+async function importPDF(){
+  const f=$("pdfFile").files[0]; if(!f)return;
+  $("importMsg").textContent="Leyendo PDF…";
+  $("diagBox").classList.add("hidden");
+  let extracted="", pages=0;
+  try{
+    if(!window._pdfjsLib) throw Error("El lector PDF aún no está disponible. Espera unos segundos y prueba de nuevo.");
+    const buf=await f.arrayBuffer(), pdf=await window._pdfjsLib.getDocument({data:buf}).promise;
+    pages=pdf.numPages;
+    let parts=[];
+    for(let p=1;p<=pdf.numPages;p++){
+      const page=await pdf.getPage(p), tc=await page.getTextContent();
+      let s="";
+      for(const it of tc.items){
+        s += it.str;
+        s += it.hasEOL ? "\n" : " ";
+      }
+      parts.push(s);
+    }
+    extracted=parts.join("\n");
+    try{
+      addTest(parseSimulacro(extracted,f.name));
+      $("importMsg").textContent="Importado correctamente.";
+      showDiag(extracted,pages,f.name,"");
+    }catch(pe){
+      $("importMsg").textContent="No se pudo importar: "+pe.message;
+      showDiag(extracted,pages,f.name,pe.message);
+    }
+  }catch(e){
+    $("importMsg").textContent="No se pudo leer el PDF: "+e.message;
+    showDiag(extracted,pages,f.name,e.message);
+  }
+}
+function importText(){
+  try{addTest(parseSimulacro($("rawText").value,"Simulacro"));$("rawText").value="";alert("Simulacro importado");}
+  catch(e){alert(e.message)}
+}
+function addTest(t){let a=load("a2tests");a.unshift(t);save("a2tests",a);renderTests()}
+function getDrafts(){return load("a2drafts",{})}
+function saveDraft(){
+  if(!current)return;
+  const d=getDrafts();
+  d[current.id]={testId:current.id,answers:{...answers},qi,date:new Date().toISOString()};
+  save("a2drafts",d);
+}
+function removeDraft(id){const d=getDrafts();delete d[id];save("a2drafts",d)}
+function renderTests(){
+  const a=load("a2tests"),d=getDrafts();
+  $("tests").innerHTML=a.length?a.map(t=>{
+    const draft=d[t.id],answered=draft?Object.keys(draft.answers||{}).length:0;
+    const actions=draft?`<button class="primary" onclick="resumeTest(${t.id})">Continuar (${answered}/${t.questions.length})</button><button class="secondary" onclick="restartTest(${t.id})">Empezar de nuevo</button>`:`<button class="primary" onclick="start(${t.id})">Empezar</button>`;
+    return `<div style="padding:10px 0;border-bottom:1px solid #eee"><b>${t.title}</b><br><span class="muted">${t.questions.length} preguntas${draft?" · En curso":""}</span><div class="row" style="margin-top:8px">${actions}<button class="danger" onclick="delTest(${t.id})">Borrar</button></div></div>`;
+  }).join(""):'<p class="muted">Todavía no hay simulacros.</p>';
+}
+function delTest(id){if(confirm("¿Borrar este simulacro?")){save("a2tests",load("a2tests").filter(x=>x.id!==id));removeDraft(id);renderTests()}}
+function start(id){current=load("a2tests").find(x=>x.id===id);if(!current)return;qi=0;answers={};saveDraft();show("exam");renderQ()}
+function resumeTest(id){
+  current=load("a2tests").find(x=>x.id===id);if(!current)return;
+  const d=getDrafts()[id];answers=d&&d.answers?{...d.answers}:{};qi=d&&Number.isInteger(d.qi)?Math.max(0,Math.min(d.qi,current.questions.length-1)):0;
+  show("exam");renderQ();
+}
+function restartTest(id){if(confirm("¿Empezar de nuevo? Se borrará el progreso guardado de este simulacro.")){removeDraft(id);start(id)}}
+function renderQ(){
+  const q=current.questions[qi]; $("counter").textContent=`${qi+1} / ${current.questions.length}`;$("bar").style.width=`${(qi+1)/current.questions.length*100}%`;
+  $("qtext").textContent=`${q.num}. ${q.text}`;$("opts").innerHTML=["A","B","C","D"].map(k=>`<button class="option ${answers[q.num]===k?"selected":""}" onclick="choose('${k}')"><b>${k})</b> ${q.options[k]}</button>`).join("");
+}
+function choose(k){answers[current.questions[qi].num]=k;saveDraft();renderQ()}
+function clearAnswer(){delete answers[current.questions[qi].num];saveDraft();renderQ()}
+function prevQ(){if(qi>0){qi--;saveDraft();renderQ()}}
+function nextQ(){if(qi<current.questions.length-1){qi++;saveDraft();renderQ()}}
+function goHome(){if(current&&!$("exam").classList.contains("hidden"))saveDraft();show("home")}
+function statusOf(q,rec){const a=rec.answers&&rec.answers[q.num];return !a?"blank":a===q.correct?"correct":"wrong"}
+function reviewHTML(rec,questions,filter){
+  if(!questions||!questions.length)return '<p class="muted">No puedo recuperar las preguntas de este intento.</p>';
+  const rows=questions.filter(q=>{const st=statusOf(q,rec);return filter==="all"?st!=="correct":st===filter});
+  if(!rows.length)return filter==="wrong"?"<p>No hay fallos.</p>":filter==="blank"?"<p>No hay preguntas en blanco.</p>":"<p>¡Todo correcto!</p>";
+  return rows.map(q=>{const a=rec.answers&&rec.answers[q.num],st=statusOf(q,rec);return `<div class="card ${st==="wrong"?"wrong":"correct"}"><b>${q.num}. ${q.text}</b><p>Tu respuesta: <b>${a||"En blanco"}</b> · Correcta: <b>${q.correct}</b></p><p>${q.correct}) ${q.options[q.correct]}</p></div>`}).join("");
+}
+let resultRec=null,resultQuestions=null,resultFilter="all",historyRec=null,historyQuestions=null,historyFilter="all";
+function renderResultReview(){$("review").innerHTML=reviewHTML(resultRec,resultQuestions,resultFilter)}
+function setResultFilter(f){resultFilter=f;renderResultReview()}
+function finishExam(){
+  if(!confirm("¿Finalizar el simulacro y corregirlo?"))return;
+  let ok=0,bad=0,blank=0;current.questions.forEach(q=>{if(!answers[q.num])blank++;else if(answers[q.num]===q.correct)ok++;else bad++});
+  const net=ok-bad/3,grade=Math.max(0,net/current.questions.length*10);
+  const rec={id:Date.now(),testId:current.id,title:current.title,date:new Date().toISOString(),ok,bad,blank,grade:+grade.toFixed(2),answers:{...answers},questions:current.questions};
+  const h=load("a2history");h.unshift(rec);save("a2history",h);removeDraft(current.id);
+  $("score").textContent=grade.toFixed(2).replace(".",",");$("summary").innerHTML=`<b>${ok}</b> aciertos · <b>${bad}</b> fallos · <b>${blank}</b> en blanco<br><span class="muted">Cálculo: aciertos − fallos/3, sobre 10.</span>`;
+  resultRec=rec;resultQuestions=current.questions;resultFilter="all";renderResultReview();show("result");
+}
+function questionsForRecord(rec){
+  if(rec.questions&&rec.questions.length)return rec.questions;
+  const t=load("a2tests").find(x=>x.id===rec.testId);return t?t.questions:null;
+}
+function showHistory(){
+  if(current&&!$("exam").classList.contains("hidden"))saveDraft();
+  const h=load("a2history");
+  $("historyTable").innerHTML=h.length?`<table><thead><tr><th>Fecha</th><th>Simulacro</th><th>Nota</th><th>A/F/B</th><th></th></tr></thead><tbody>${h.map(x=>`<tr><td>${new Date(x.date).toLocaleDateString("es-ES")}</td><td>${x.title}</td><td><b>${Number(x.grade).toFixed(2).replace(".",",")}</b></td><td>${x.ok}/${x.bad}/${x.blank}</td><td><button class="secondary" onclick="openHistoryReview(${x.id})">Revisar</button></td></tr>`).join("")}</tbody></table>`:"<p class='muted'>Aún no hay resultados.</p>";
+  $("historyReview").classList.add("hidden");show("history");
+}
+function openHistoryReview(id){
+  const rec=load("a2history").find(x=>x.id===id);if(!rec)return;
+  historyRec=rec;historyQuestions=questionsForRecord(rec);historyFilter="all";
+  $("historyReviewSummary").innerHTML=`<b>${rec.title}</b> · ${new Date(rec.date).toLocaleDateString("es-ES")} · Nota <b>${Number(rec.grade).toFixed(2).replace(".",",")}</b> · ${rec.ok} aciertos / ${rec.bad} fallos / ${rec.blank} blancos`;
+  $("historyReview").classList.remove("hidden");renderHistoryReview();$("historyReview").scrollIntoView({behavior:"smooth",block:"start"});
+}
+function renderHistoryReview(){$("historyReviewList").innerHTML=reviewHTML(historyRec,historyQuestions,historyFilter)}
+function setHistoryFilter(f){historyFilter=f;renderHistoryReview()}
+function closeHistoryReview(){$("historyReview").classList.add("hidden")}
+
+function downloadJSON(obj,name){
+  const blob=new Blob([JSON.stringify(obj,null,2)],{type:"application/json;charset=utf-8"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+function exportBackup(){
+  const data={format:"operacion-a2-backup-v1",createdAt:new Date().toISOString(),tests:load("a2tests"),history:load("a2history"),drafts:load("a2drafts",{})};
+  downloadJSON(data,"operacion_A2_copia_seguridad.json");
+  $("backupMsg").textContent="Copia guardada. Consérvala en un lugar seguro.";
+}
+function historyKey(x){return [x.date||"",x.title||"",Number(x.grade||0).toFixed(2),x.ok??"",x.bad??"",x.blank??""].join("|")}
+function mergeHistory(incoming){
+  const existing=load("a2history"), seen=new Set(existing.map(historyKey)); let added=0;
+  for(const x of incoming||[]){if(!seen.has(historyKey(x))){existing.push(x);seen.add(historyKey(x));added++}}
+  existing.sort((a,b)=>new Date(b.date)-new Date(a.date));save("a2history",existing);return added;
+}
+async function importBackupFile(ev){
+  const f=ev.target.files&&ev.target.files[0];if(!f)return;
+  try{
+    const data=JSON.parse(await f.text());
+    if(data.format==="operacion-a2-history-v1"&&Array.isArray(data.history)){
+      const added=mergeHistory(data.history);$("backupMsg").textContent=`Histórico incorporado: ${added} registros nuevos.`;showHistory();
+    }else if(data.format==="operacion-a2-backup-v1"){
+      if(!confirm("¿Restaurar esta copia? Se combinará con lo que ya tengas y no se borrará tu histórico actual.")){ev.target.value="";return}
+      const tests=load("a2tests"), ids=new Set(tests.map(x=>x.id));for(const t of data.tests||[]){if(!ids.has(t.id)){tests.push(t);ids.add(t.id)}}save("a2tests",tests);
+      const added=mergeHistory(data.history||[]);
+      const drafts=load("a2drafts",{});Object.assign(drafts,data.drafts||{});save("a2drafts",drafts);
+      $("backupMsg").textContent=`Copia restaurada. Histórico: ${added} registros nuevos.`;renderTests();
+    }else throw Error("Este archivo no es una copia compatible de Operación A2.");
+  }catch(e){alert("No se pudo importar: "+e.message)}finally{ev.target.value=""}
+}
+
+renderTests();
+if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
+window.importPDF=importPDF;window.importText=importText;window.start=start;window.resumeTest=resumeTest;window.restartTest=restartTest;window.delTest=delTest;window.choose=choose;window.prevQ=prevQ;window.nextQ=nextQ;window.clearAnswer=clearAnswer;window.finishExam=finishExam;window.goHome=goHome;window.show=show;window.showHistory=showHistory;window.setResultFilter=setResultFilter;window.openHistoryReview=openHistoryReview;window.setHistoryFilter=setHistoryFilter;window.closeHistoryReview=closeHistoryReview;window.exportBackup=exportBackup;window.importBackupFile=importBackupFile;
+</script>
+</body></html>
