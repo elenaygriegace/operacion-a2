@@ -29,7 +29,7 @@
 </head>
 <body>
 <div class="wrap">
-<header><h1>OPERACIÓN A2</h1><span class="pill">Simulacros · V11</span></header>
+<header><h1>OPERACIÓN A2</h1><span class="pill">Simulacros · V12</span></header>
 
 <section id="home">
   <div class="card">
@@ -64,6 +64,11 @@
     </div>
     <input id="restoreFile" type="file" accept="application/json,.json" style="display:none" onchange="importBackupFile(event)"/>
     <p id="backupMsg" class="muted"></p>
+  </div>
+  <div class="card">
+    <h2>🎯 Banco de errores</h2>
+    <p class="muted">Reúne automáticamente las preguntas que has fallado. Permanecen aquí hasta que las aciertes.</p>
+    <div id="errorBank"></div>
   </div>
   <div class="card">
     <h2>Simulacros guardados</h2>
@@ -272,7 +277,52 @@ function saveDraft(){
   save("a2drafts",d);
 }
 function removeDraft(id){const d=getDrafts();delete d[id];save("a2drafts",d)}
+function errorKey(testId,num){return String(testId)+"::"+String(num)}
+function getErrors(){return load("a2errors",{})}
+function saveErrors(e){save("a2errors",e)}
+function seedErrorsFromHistory(){
+  if(localStorage.getItem("a2errorsInitialized"))return;
+  const e={};
+  const h=load("a2history").slice().sort((a,b)=>new Date(a.date)-new Date(b.date));
+  for(const rec of h){
+    const qs=questionsForRecord(rec);if(!qs||!qs.length||rec.testId==null)continue;
+    for(const q of qs){
+      const a=rec.answers&&rec.answers[q.num], k=errorKey(rec.testId,q.num);
+      if(a&&a===q.correct)delete e[k];
+      else if(a&&a!==q.correct)e[k]={key:k,sourceTestId:rec.testId,sourceTitle:rec.title,num:q.num,text:q.text,options:q.options,correct:q.correct};
+    }
+  }
+  saveErrors(e);localStorage.setItem("a2errorsInitialized","1");
+}
+function updateErrorsFromAttempt(test,attemptAnswers){
+  const e=getErrors();
+  for(const q of test.questions||[]){
+    const a=attemptAnswers[q.num];
+    const k=q._errorKey||errorKey(test.id,q.num);
+    if(a&&a===q.correct)delete e[k];
+    else if(a&&a!==q.correct)e[k]={key:k,sourceTestId:q._sourceTestId??test.id,sourceTitle:q._sourceTitle||test.title,num:q._sourceNum??q.num,text:q.text,options:q.options,correct:q.correct};
+  }
+  saveErrors(e);renderErrorBank();
+}
+function renderErrorBank(){
+  const e=Object.values(getErrors()), d=getDrafts()["__errors__"];
+  if(!e.length){$("errorBank").innerHTML='<p class="muted">No tienes preguntas pendientes en el banco de errores. 🎉</p>';return}
+  const answered=d?Object.keys(d.answers||{}).length:0;
+  $("errorBank").innerHTML=`<p><b>${e.length}</b> preguntas pendientes.</p><div class="row"><button class="primary" onclick="startErrorTest()">${d?'Continuar repaso ('+answered+'/'+e.length+')':'Hacer test de errores'}</button>${d?'<button class="secondary" onclick="restartErrorTest()">Empezar de nuevo</button>':''}</div>`;
+}
+function makeErrorTest(){
+  const items=Object.values(getErrors());
+  return {id:"__errors__",title:"REPASO DE ERRORES",questions:items.map((x,i)=>({num:i+1,text:x.text,options:x.options,correct:x.correct,_errorKey:x.key,_sourceTestId:x.sourceTestId,_sourceTitle:x.sourceTitle,_sourceNum:x.num}))};
+}
+function startErrorTest(){
+  const t=makeErrorTest();if(!t.questions.length){alert("No tienes preguntas pendientes.");return}
+  current=t;const d=getDrafts()["__errors__"];
+  answers=d&&d.answers?{...d.answers}:{};qi=d&&Number.isInteger(d.qi)?Math.max(0,Math.min(d.qi,t.questions.length-1)):0;
+  show("exam");renderQ();saveDraft();
+}
+function restartErrorTest(){if(confirm("¿Empezar de nuevo el repaso de errores?")){removeDraft("__errors__");current=null;startErrorTest()}}
 function renderTests(){
+  renderErrorBank();
   const a=load("a2tests"),d=getDrafts();
   $("tests").innerHTML=a.length?a.map(t=>{
     const draft=d[t.id],answered=draft?Object.keys(draft.answers||{}).length:0;
@@ -311,6 +361,7 @@ function finishExam(){
   if(!confirm("¿Finalizar el simulacro y corregirlo?"))return;
   let ok=0,bad=0,blank=0;current.questions.forEach(q=>{if(!answers[q.num])blank++;else if(answers[q.num]===q.correct)ok++;else bad++});
   const net=ok-bad/3,grade=Math.max(0,net/current.questions.length*10);
+  updateErrorsFromAttempt(current,answers);
   const rec={id:Date.now(),testId:current.id,title:current.title,date:new Date().toISOString(),ok,bad,blank,grade:+grade.toFixed(2),answers:{...answers},questions:current.questions};
   const h=load("a2history");h.unshift(rec);save("a2history",h);removeDraft(current.id);
   $("score").textContent=grade.toFixed(2).replace(".",",");$("summary").innerHTML=`<b>${ok}</b> aciertos · <b>${bad}</b> fallos · <b>${blank}</b> en blanco<br><span class="muted">Cálculo: aciertos − fallos/3, sobre 10.</span>`;
@@ -342,7 +393,7 @@ function downloadJSON(obj,name){
   setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
 function exportBackup(){
-  const data={format:"operacion-a2-backup-v1",createdAt:new Date().toISOString(),tests:load("a2tests"),history:load("a2history"),drafts:load("a2drafts",{})};
+  const data={format:"operacion-a2-backup-v1",createdAt:new Date().toISOString(),tests:load("a2tests"),history:load("a2history"),drafts:load("a2drafts",{}),errors:getErrors()};
   downloadJSON(data,"operacion_A2_copia_seguridad.json");
   $("backupMsg").textContent="Copia guardada. Consérvala en un lugar seguro.";
 }
@@ -363,13 +414,15 @@ async function importBackupFile(ev){
       const tests=load("a2tests"), ids=new Set(tests.map(x=>x.id));for(const t of data.tests||[]){if(!ids.has(t.id)){tests.push(t);ids.add(t.id)}}save("a2tests",tests);
       const added=mergeHistory(data.history||[]);
       const drafts=load("a2drafts",{});Object.assign(drafts,data.drafts||{});save("a2drafts",drafts);
+      const errs=getErrors();Object.assign(errs,data.errors||{});saveErrors(errs);
       $("backupMsg").textContent=`Copia restaurada. Histórico: ${added} registros nuevos.`;renderTests();
     }else throw Error("Este archivo no es una copia compatible de Operación A2.");
   }catch(e){alert("No se pudo importar: "+e.message)}finally{ev.target.value=""}
 }
 
+seedErrorsFromHistory();
 renderTests();
 if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
-window.importPDF=importPDF;window.importText=importText;window.start=start;window.resumeTest=resumeTest;window.restartTest=restartTest;window.delTest=delTest;window.choose=choose;window.prevQ=prevQ;window.nextQ=nextQ;window.clearAnswer=clearAnswer;window.finishExam=finishExam;window.goHome=goHome;window.show=show;window.showHistory=showHistory;window.setResultFilter=setResultFilter;window.openHistoryReview=openHistoryReview;window.setHistoryFilter=setHistoryFilter;window.closeHistoryReview=closeHistoryReview;window.exportBackup=exportBackup;window.importBackupFile=importBackupFile;
+window.importPDF=importPDF;window.importText=importText;window.start=start;window.resumeTest=resumeTest;window.restartTest=restartTest;window.delTest=delTest;window.choose=choose;window.prevQ=prevQ;window.nextQ=nextQ;window.clearAnswer=clearAnswer;window.finishExam=finishExam;window.goHome=goHome;window.show=show;window.showHistory=showHistory;window.setResultFilter=setResultFilter;window.openHistoryReview=openHistoryReview;window.setHistoryFilter=setHistoryFilter;window.closeHistoryReview=closeHistoryReview;window.exportBackup=exportBackup;window.importBackupFile=importBackupFile;window.startErrorTest=startErrorTest;window.restartErrorTest=restartErrorTest;
 </script>
 </body></html>

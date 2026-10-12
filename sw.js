@@ -1,1 +1,5 @@
-<html><head><meta content="text/html; charset=UTF-8" http-equiv="content-type"><title>Gmail - Error de descarga</title></head><body>Como medida de seguridad, Gmail no te permite utilizar este tipo de archivo porque infringe la política de Google sobre archivos ejecutables y comprimidos.</body></html>
+const CACHE="operacion-a2-v12";
+const ASSETS=["./","./index.html","./manifest.webmanifest","./icon-192.png","./icon-512.png"];
+self.addEventListener("install",e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting())));
+self.addEventListener("activate",e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
+self.addEventListener("fetch",e=>e.respondWith(fetch(e.request).then(r=>{const copy=r.clone();caches.open(CACHE).then(c=>c.put(e.request,copy));return r}).catch(()=>caches.match(e.request))));
