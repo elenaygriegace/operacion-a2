@@ -29,7 +29,7 @@
 </head>
 <body>
 <div class="wrap">
-<header><h1>OPERACIÓN A2</h1><span class="pill">Simulacros · V12</span></header>
+<header><h1>OPERACIÓN A2</h1><span class="pill">Simulacros · V13</span></header>
 
 <section id="home">
   <div class="card">
@@ -138,20 +138,21 @@ function parseSimulacro(text, filename="Simulacro"){
   if(keyStart<0) throw Error("No encuentro la plantilla de respuestas.");
   const body=text.slice(0,keyStart), key=text.slice(keyStart);
 
+  // V13: leer únicamente pares completos «número + respuesta» de la plantilla.
+  // No se tokeniza todo el final del PDF: así cifras de textos posteriores no pueden alterar respuestas.
   let correct={};
-  const tokens=key.match(/\b\d{1,3}\b|[ABCD]/g)||[];
-  for(let i=0;i<tokens.length-1;i++){
-    if(/^\d+$/.test(tokens[i]) && /^[ABCD]$/.test(tokens[i+1])){
-      const n=+tokens[i]; if(n>=1&&n<=90) correct[n]=tokens[i+1];
-    }
+  const pairRx=/(?:^|\s)(\d{1,3})\s+([ABCD])(?=\s|$)/g;
+  let pm;
+  while((pm=pairRx.exec(key))!==null){
+    const n=Number(pm[1]);
+    if(n>=1 && n<=90 && correct[n]===undefined) correct[n]=pm[2];
   }
 
-  // Solo aceptamos una plantilla consecutiva: 1, 2, 3... hasta la última pregunta.
   let total=0;
   while(total<90 && correct[total+1]) total++;
   if(total<1) throw Error("No he podido leer ninguna respuesta de la plantilla.");
-  const extras=Object.keys(correct).map(Number).filter(n=>n>total && n<=90);
-  if(extras.length) throw Error("La plantilla de respuestas no es consecutiva: falta la respuesta "+(total+1)+".");
+  const detected=Object.keys(correct).map(Number).filter(n=>n>=1&&n<=90);
+  if(detected.some(n=>n>total)) throw Error("La plantilla de respuestas no es consecutiva: falta la respuesta "+(total+1)+".");
 
   let marks=[], from=0;
   for(let n=1;n<=total;n++){
@@ -280,19 +281,24 @@ function removeDraft(id){const d=getDrafts();delete d[id];save("a2drafts",d)}
 function errorKey(testId,num){return String(testId)+"::"+String(num)}
 function getErrors(){return load("a2errors",{})}
 function saveErrors(e){save("a2errors",e)}
-function seedErrorsFromHistory(){
-  if(localStorage.getItem("a2errorsInitialized"))return;
+function rebuildErrorsFromHistory(){
   const e={};
   const h=load("a2history").slice().sort((a,b)=>new Date(a.date)-new Date(b.date));
   for(const rec of h){
-    const qs=questionsForRecord(rec);if(!qs||!qs.length||rec.testId==null)continue;
+    const qs=questionsForRecord(rec);if(!qs||!qs.length)continue;
     for(const q of qs){
-      const a=rec.answers&&rec.answers[q.num], k=errorKey(rec.testId,q.num);
+      const a=rec.answers&&rec.answers[q.num];
+      const k=q._errorKey||errorKey(q._sourceTestId??rec.testId,q._sourceNum??q.num);
+      if(!k)continue;
       if(a&&a===q.correct)delete e[k];
-      else if(a&&a!==q.correct)e[k]={key:k,sourceTestId:rec.testId,sourceTitle:rec.title,num:q.num,text:q.text,options:q.options,correct:q.correct};
+      else if(a&&a!==q.correct)e[k]={key:k,sourceTestId:q._sourceTestId??rec.testId,sourceTitle:q._sourceTitle||rec.title,num:q._sourceNum??q.num,text:q.text,options:q.options,correct:q.correct};
     }
   }
-  saveErrors(e);localStorage.setItem("a2errorsInitialized","1");
+  saveErrors(e);localStorage.setItem("a2errorsInitialized","1");renderErrorBank();
+}
+function seedErrorsFromHistory(){
+  if(localStorage.getItem("a2errorsInitialized"))return;
+  rebuildErrorsFromHistory();
 }
 function updateErrorsFromAttempt(test,attemptAnswers){
   const e=getErrors();
@@ -374,8 +380,16 @@ function questionsForRecord(rec){
 function showHistory(){
   if(current&&!$("exam").classList.contains("hidden"))saveDraft();
   const h=load("a2history");
-  $("historyTable").innerHTML=h.length?`<table><thead><tr><th>Fecha</th><th>Simulacro</th><th>Nota</th><th>A/F/B</th><th></th></tr></thead><tbody>${h.map(x=>`<tr><td>${new Date(x.date).toLocaleDateString("es-ES")}</td><td>${x.title}</td><td><b>${Number(x.grade).toFixed(2).replace(".",",")}</b></td><td>${x.ok}/${x.bad}/${x.blank}</td><td><button class="secondary" onclick="openHistoryReview(${x.id})">Revisar</button></td></tr>`).join("")}</tbody></table>`:"<p class='muted'>Aún no hay resultados.</p>";
+  $("historyTable").innerHTML=h.length?`<table><thead><tr><th>Fecha</th><th>Simulacro</th><th>Nota</th><th>A/F/B</th><th></th></tr></thead><tbody>${h.map(x=>`<tr><td>${new Date(x.date).toLocaleDateString("es-ES")}</td><td>${x.title}</td><td><b>${Number(x.grade).toFixed(2).replace(".",",")}</b></td><td>${x.ok}/${x.bad}/${x.blank}</td><td><div class="row"><button class="secondary" onclick="openHistoryReview(${x.id})">Revisar</button><button class="danger" onclick="deleteHistoryAttempt(${x.id})">Eliminar</button></div></td></tr>`).join("")}</tbody></table>`:"<p class='muted'>Aún no hay resultados.</p>";
   $("historyReview").classList.add("hidden");show("history");
+}
+function deleteHistoryAttempt(id){
+  const h=load("a2history"),rec=h.find(x=>x.id===id);if(!rec)return;
+  if(!confirm("¿Eliminar SOLO este intento del histórico? Los demás resultados y simulacros se conservarán."))return;
+  save("a2history",h.filter(x=>x.id!==id));
+  rebuildErrorsFromHistory();
+  if(historyRec&&historyRec.id===id)closeHistoryReview();
+  showHistory();
 }
 function openHistoryReview(id){
   const rec=load("a2history").find(x=>x.id===id);if(!rec)return;
@@ -423,6 +437,6 @@ async function importBackupFile(ev){
 seedErrorsFromHistory();
 renderTests();
 if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
-window.importPDF=importPDF;window.importText=importText;window.start=start;window.resumeTest=resumeTest;window.restartTest=restartTest;window.delTest=delTest;window.choose=choose;window.prevQ=prevQ;window.nextQ=nextQ;window.clearAnswer=clearAnswer;window.finishExam=finishExam;window.goHome=goHome;window.show=show;window.showHistory=showHistory;window.setResultFilter=setResultFilter;window.openHistoryReview=openHistoryReview;window.setHistoryFilter=setHistoryFilter;window.closeHistoryReview=closeHistoryReview;window.exportBackup=exportBackup;window.importBackupFile=importBackupFile;window.startErrorTest=startErrorTest;window.restartErrorTest=restartErrorTest;
+window.importPDF=importPDF;window.importText=importText;window.start=start;window.resumeTest=resumeTest;window.restartTest=restartTest;window.delTest=delTest;window.choose=choose;window.prevQ=prevQ;window.nextQ=nextQ;window.clearAnswer=clearAnswer;window.finishExam=finishExam;window.goHome=goHome;window.show=show;window.showHistory=showHistory;window.setResultFilter=setResultFilter;window.openHistoryReview=openHistoryReview;window.setHistoryFilter=setHistoryFilter;window.closeHistoryReview=closeHistoryReview;window.exportBackup=exportBackup;window.importBackupFile=importBackupFile;window.startErrorTest=startErrorTest;window.restartErrorTest=restartErrorTest;window.deleteHistoryAttempt=deleteHistoryAttempt;
 </script>
 </body></html>
